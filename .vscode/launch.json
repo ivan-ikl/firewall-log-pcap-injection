@@ -12,7 +12,11 @@
             "console": "integratedTerminal",
             "args": [
                 "${workspaceFolder}/data/sample.pcap",
-                "--output", "${workspaceFolder}/data/sample.csv"
+                "--output", "${workspaceFolder}/data/sample.csv",
+                "--target-start-time", "2022-05-09T16:27:05.966627",
+                "-r", "161.53.65.0:192.168.1.0/24",
+                "-r", "10.0.2.15:192.168.2.15",
+                "-r", "10.0.2.3:192.168.2.3"
             ],
             "justMyCode": true
         }
