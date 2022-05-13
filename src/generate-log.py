@@ -18,16 +18,16 @@ class PacketProcessor:
             replacements: List[Tuple[str, str, int]]
             ) -> str:
         if ip not in self._ip_replacements:
-            for r in replacements:
-                if ip in r[0] and r[2] == 32:
-                    self._ip_replacements[ip] = r[1]
+            for old_subnet, new_subnet in replacements:
+                if ip == old_subnet and "/" not in new_subnet:
+                    self._ip_replacements[ip] = new_subnet
                     break
-                elif r[2] < 32:
+                else:
                     addr = ipaddress.ip_address(ip)
-                    src_subnet = ipaddress.ip_network(f"{r[0]}/{r[2]}")
+                    src_subnet = ipaddress.ip_network(old_subnet)
                     if addr in src_subnet:
                         # addr in in src_subnet, replace with dst_subnet
-                        dst_subnet = ipaddress.ip_network(f"{r[1]}/{r[2]}")
+                        dst_subnet = ipaddress.ip_network(new_subnet)
                         new_packed_addr = bytes([
                             a & b | c & d for a, b, c, d in zip(
                                 addr.packed,
@@ -165,14 +165,9 @@ if __name__ == '__main__':
     replacements = []
     if args["replace_ip"]:
         for r in args["replace_ip"]:
-            old = (
-                r[0].split("/")[0].split(":")[0]
-                if "/" in r[0] else r[0].split(":")[0])
-            new = (
-                r[0].split("/")[0].split(":")[1]
-                if "/" in r[0] else r[0].split(":")[1])
-            bits = int(r[0].split("/")[1]) if "/" in r[0] else 32
-            replacements.append((old, new, bits))
+            old = r[0].split(":")[0]
+            new = r[0].split(":")[1]
+            replacements.append((old, new))
 
     ignored_ip_addresses = ({
         ip[0] for ip in args["ignore_ip"]
