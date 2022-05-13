@@ -158,7 +158,7 @@ def parse_pcap(inputfile: str) -> List[dict]:
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Cyber landscape generator')
+    parser = argparse.ArgumentParser(description='PCAP CSV log generator')
     parser.add_argument('inputfile', help='Input PCAP filename.', type=str)
     parser.add_argument(
         '-o', '--output', help='Output CSV filename.', type=str, required=True)
