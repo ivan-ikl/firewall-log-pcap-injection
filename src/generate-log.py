@@ -54,8 +54,8 @@ class PacketProcessor:
                 record["Source IP"], ignored_ip_addresses, ignored_ip_ranges,
                 ignored_ip_subnets)
             dst_ignored = self.is_ip_ignored(
-                record["Source IP"], ignored_ip_addresses, ignored_ip_ranges,
-                ignored_ip_subnets)
+                record["Destination IP"], ignored_ip_addresses,
+                ignored_ip_ranges, ignored_ip_subnets)
             if not src_ignored and not dst_ignored:
                 new_record = {
                     "Timestamp": record["Timestamp"] + time_shift,
@@ -74,17 +74,18 @@ class PacketProcessor:
             ignored_ip_addresses: Set[str],
             ignored_ip_ranges: List[Tuple[str, str]],
             ignored_ip_subnets: List[str]) -> bool:
+        ip = ipaddress.ip_address(ip_address)
         return (
             ip_address in ignored_ip_addresses
             or [
                 1 for subnet in ignored_ip_subnets
-                if ip_address in ipaddress.ip_network(subnet)
+                if ip in ipaddress.ip_network(subnet)
             ]
             or [
                 1 for start, end in ignored_ip_ranges
                 if (
-                    int(ip_address) >= int(ipaddress.IPv4Address(start))
-                    and int(ip_address) <= int(ipaddress.IPv4Address(end))
+                    int(ip) >= int(ipaddress.IPv4Address(start))
+                    and int(ip) <= int(ipaddress.IPv4Address(end))
                 )
             ]
         )
@@ -174,14 +175,14 @@ if __name__ == '__main__':
             replacements.append((old, new, bits))
 
     ignored_ip_addresses = ({
-        ip[0] for ip in args["ignore_ip"] if "-" not in ip and "/" not in ip
+        ip[0] for ip in args["ignore_ip"]
+        if "-" not in ip[0] and "/" not in ip[0]
     } if args["ignore_ip"] else set())
     ignored_ip_ranges = ([
-        tuple(ip[0].split("-")) for ip in args["ignore_ip"] if "-" in ip
+        tuple(ip[0].split("-")) for ip in args["ignore_ip"] if "-" in ip[0]
     ] if args["ignore_ip"] else [])
     ignored_ip_subnets = ([
-        (ip[0].split("/")[0], int(ip[0].split("/")[1]))
-        for ip in args["ignore_ip"] if "-" in ip
+        ip[0] for ip in args["ignore_ip"] if "/" in ip[0]
     ] if args["ignore_ip"] else [])
 
     inputfile, outputfile = args["inputfile"], args["output"]
