@@ -3,7 +3,7 @@ import pcapkit
 import ipaddress
 import csv
 from datetime import datetime, timedelta
-from typing import Dict, List, Tuple
+from typing import List, Tuple, Set
 
 
 class PacketProcessor:
@@ -38,25 +38,56 @@ class PacketProcessor:
                         new_addr = ipaddress.ip_address(new_packed_addr)
                         self._ip_replacements[ip] = new_addr.exploded
                         break
-        return self._ip_replacements[ip]
+        return self._ip_replacements[ip] if ip in self._ip_replacements else ip
 
     def process_packet_records(
             self,
             source: List[dict],
             replacements: List[Tuple[str, str, int]],
+            ignored_ip_addresses: Set[str],
+            ignored_ip_ranges: List[Tuple[str, str]],
+            ignored_ip_subnets: List[str],
             time_shift: timedelta) -> List[dict]:
         new_records = []
         for record in source:
-            new_record = {
-                "Timestamp": record["Timestamp"] + time_shift,
-                "Source IP": self.replace_ip(record["Source IP"], replacements),
-                "Source Port": record["Source Port"],
-                "Destination IP": self.replace_ip(record["Destination IP"], replacements),
-                "Destination Port": record["Destination Port"],
-                "Protokol": record["Protokol"]
-            }
-            new_records.append(new_record)
+            src_ignored = self.is_ip_ignored(
+                record["Source IP"], ignored_ip_addresses, ignored_ip_ranges,
+                ignored_ip_subnets)
+            dst_ignored = self.is_ip_ignored(
+                record["Source IP"], ignored_ip_addresses, ignored_ip_ranges,
+                ignored_ip_subnets)
+            if not src_ignored and not dst_ignored:
+                new_record = {
+                    "Timestamp": record["Timestamp"] + time_shift,
+                    "Source IP": self.replace_ip(record["Source IP"], replacements),
+                    "Source Port": record["Source Port"],
+                    "Destination IP": self.replace_ip(record["Destination IP"], replacements),
+                    "Destination Port": record["Destination Port"],
+                    "Protokol": record["Protokol"]
+                }
+                new_records.append(new_record)
         return new_records
+
+    @staticmethod
+    def is_ip_ignored(
+            ip_address: str,
+            ignored_ip_addresses: Set[str],
+            ignored_ip_ranges: List[Tuple[str, str]],
+            ignored_ip_subnets: List[str]) -> bool:
+        return (
+            ip_address in ignored_ip_addresses
+            or [
+                1 for subnet in ignored_ip_subnets
+                if ip_address in ipaddress.ip_network(subnet)
+            ]
+            or [
+                1 for start, end in ignored_ip_ranges
+                if (
+                    int(ip_address) >= int(ipaddress.IPv4Address(start))
+                    and int(ip_address) <= int(ipaddress.IPv4Address(end))
+                )
+            ]
+        )
 
 
 def parse_pcap(inputfile: str) -> List[dict]:
@@ -100,7 +131,7 @@ def parse_pcap(inputfile: str) -> List[dict]:
                 "Source Port": "",
                 "Destination IP": frame.payload.payload.dst.exploded,
                 "Destination Port": "",
-                "Protokol": "ICMP"
+                "Protokol": "icmp"
             }
             records.append(record)
     return records
@@ -122,21 +153,36 @@ if __name__ == '__main__':
             + 'Multiple pairs can be replaced using multiple -r args.'
         ), action='append', type=str)
     parser.add_argument(
-        '-l', '--limit-ip', nargs='+',
-        help='Specify IP address or range to ignore.', action='append',
-        type=str)
+        '-i', '--ignore-ip', nargs='+', help=(
+            'Specify IP address or range to ignore. Can specify either '
+            + 'individual addresses, ranges such as 10.0.1.15-10.0.1.255, '
+            + 'or subnets, such as 10.0.1.0/24.'
+        ), action='append', type=str)
 
     args = vars(parser.parse_args())
+
     replacements = []
-    for r in args["replace_ip"]:
-        old = (
-            r[0].split("/")[0].split(":")[0]
-            if "/" in r[0] else r[0].split(":")[0])
-        new = (
-            r[0].split("/")[0].split(":")[1]
-            if "/" in r[0] else r[0].split(":")[1])
-        bits = int(r[0].split("/")[1]) if "/" in r[0] else 32
-        replacements.append((old, new, bits))
+    if args["replace_ip"]:
+        for r in args["replace_ip"]:
+            old = (
+                r[0].split("/")[0].split(":")[0]
+                if "/" in r[0] else r[0].split(":")[0])
+            new = (
+                r[0].split("/")[0].split(":")[1]
+                if "/" in r[0] else r[0].split(":")[1])
+            bits = int(r[0].split("/")[1]) if "/" in r[0] else 32
+            replacements.append((old, new, bits))
+
+    ignored_ip_addresses = ({
+        ip[0] for ip in args["ignore_ip"] if "-" not in ip and "/" not in ip
+    } if args["ignore_ip"] else set())
+    ignored_ip_ranges = ([
+        tuple(ip[0].split("-")) for ip in args["ignore_ip"] if "-" in ip
+    ] if args["ignore_ip"] else [])
+    ignored_ip_subnets = ([
+        (ip[0].split("/")[0], int(ip[0].split("/")[1]))
+        for ip in args["ignore_ip"] if "-" in ip
+    ] if args["ignore_ip"] else [])
 
     inputfile, outputfile = args["inputfile"], args["output"]
     print(f"Parsing PCAP: '{inputfile}'")
@@ -151,7 +197,8 @@ if __name__ == '__main__':
     print("Processing records...")
     packet_processor = PacketProcessor()
     output_records = packet_processor.process_packet_records(
-        records, replacements, new_time - min_timestamp)
+        records, replacements, ignored_ip_addresses, ignored_ip_ranges,
+        ignored_ip_subnets, new_time - min_timestamp)
 
     print("Storing results...")
     with open(outputfile, 'w') as f:
