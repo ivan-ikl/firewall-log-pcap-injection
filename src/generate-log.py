@@ -47,8 +47,10 @@ class PacketProcessor:
             ignored_ip_addresses: Set[str],
             ignored_ip_ranges: List[Tuple[str, str]],
             ignored_ip_subnets: List[str],
-            time_shift: timedelta) -> List[dict]:
+            time_shift: timedelta,
+            filter_response: bool) -> List[dict]:
         new_records = []
+        awaiting_response = set()
         for record in source:
             src_ignored = self.is_ip_ignored(
                 record["Source IP"], ignored_ip_addresses, ignored_ip_ranges,
@@ -57,15 +59,32 @@ class PacketProcessor:
                 record["Destination IP"], ignored_ip_addresses,
                 ignored_ip_ranges, ignored_ip_subnets)
             if not src_ignored and not dst_ignored:
+                src_ip = self.replace_ip(record["Source IP"], replacements)
+                src_port = record["Source Port"]
+                dst_ip = self.replace_ip(record["Destination IP"], replacements)
+                dst_port = record["Destination Port"]
                 new_record = {
                     "Timestamp": record["Timestamp"] + time_shift,
-                    "Source IP": self.replace_ip(record["Source IP"], replacements),
-                    "Source Port": record["Source Port"],
-                    "Destination IP": self.replace_ip(record["Destination IP"], replacements),
-                    "Destination Port": record["Destination Port"],
+                    "Source IP": src_ip,
+                    "Source Port": src_port,
+                    "Destination IP": dst_ip,
+                    "Destination Port": dst_port,
                     "Protokol": record["Protokol"]
                 }
-                new_records.append(new_record)
+                if filter_response:
+                    # TODO: Present implementation is very naive, aim to
+                    # develop a better response recongintion in the future
+                    packet = (
+                        src_ip, src_port, dst_ip, dst_port, record["Protokol"])
+                    inverse = (
+                        dst_ip, dst_port, src_ip, src_port, record["Protokol"])
+                    if inverse in awaiting_response:
+                        awaiting_response.remove(inverse)
+                    else:
+                        awaiting_response.add(packet)
+                        new_records.append(new_record)
+                else:
+                    new_records.append(new_record)
         return new_records
 
     @staticmethod
@@ -147,6 +166,9 @@ if __name__ == '__main__':
         '-t', '--target-start-time', help='Date and time of initial event.',
         type=str)
     parser.add_argument(
+        '-n', '--no-response', help='Ignore response.',
+        const=True, default=False, action='store_const')
+    parser.add_argument(
         '-r', '--replace-ip', nargs='+', help=(
             'Specify IP address replacement. Can specify either individual '
             + 'addresses, such as 10.0.1.10:192.168.1.10, or ranges of IP '
@@ -194,7 +216,7 @@ if __name__ == '__main__':
     packet_processor = PacketProcessor()
     output_records = packet_processor.process_packet_records(
         records, replacements, ignored_ip_addresses, ignored_ip_ranges,
-        ignored_ip_subnets, new_time - min_timestamp)
+        ignored_ip_subnets, new_time - min_timestamp, args["no_response"])
 
     print("Storing results...")
     with open(outputfile, 'w') as f:
