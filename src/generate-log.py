@@ -59,41 +59,15 @@ class PacketProcessor:
         return new_records
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Cyber landscape generator')
-    parser.add_argument('inputfile', help='Input PCAP filename.', type=str)
-    parser.add_argument(
-        '-o', '--output', help='Output CSV filename.', type=str)
-    parser.add_argument(
-        '-t', '--target-start-time', help='Date and time of initial event.',
-        type=str)
-    parser.add_argument(
-        '-r', '--replace-ip', nargs='+', help=(
-            'Specify IP address replacement. Can specify either individual '
-            + 'addresses, such as 10.0.1.10:192.168.1.10, or ranges of IP '
-            + 'addresses with subnet bits, such as 10.0.1.0:192.168.1.0/24. '
-            + 'Multiple pairs can be replaced using multiple -r args.'
-        ), action='append', type=str)
-
-    args = vars(parser.parse_args())
-    inputfile, outputfile = args["inputfile"], args["output"]
-    replacements = []
-    for r in args["replace_ip"]:
-        old = (
-            r[0].split("/")[0].split(":")[0]
-            if "/" in r[0] else r[0].split(":")[0])
-        new = (
-            r[0].split("/")[0].split(":")[1]
-            if "/" in r[0] else r[0].split(":")[1])
-        bits = int(r[0].split("/")[1]) if "/" in r[0] else 32
-        replacements.append((old, new, bits))
-
-    print(f"Parsing PCAP: '{inputfile}'")
+def parse_pcap(inputfile: str) -> List[dict]:
     extraction = pcapkit.extract(fin=inputfile, nofile=True)
     records = []
     for frame in extraction.frame:
         is_TCP = frame.info.protocols.startswith('Ethernet:IPv4:TCP')
         is_UDP = frame.info.protocols.startswith('Ethernet:IPv4:UDP')
+        is_ICMP = (
+            frame.info.protocols.startswith('Ethernet:IPv4:Raw')
+            and frame.payload.payload.protocol == 1)
         if is_TCP or is_UDP:
             record = {
                 "Timestamp": frame.info.time,
@@ -119,6 +93,54 @@ if __name__ == '__main__':
             }
             if record["Source Port"] and record["Destination Port"]:
                 records.append(record)
+        if is_ICMP:
+            record = {
+                "Timestamp": frame.info.time,
+                "Source IP": frame.payload.payload.src.exploded,
+                "Source Port": "",
+                "Destination IP": frame.payload.payload.dst.exploded,
+                "Destination Port": "",
+                "Protokol": "ICMP"
+            }
+            records.append(record)
+    return records
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Cyber landscape generator')
+    parser.add_argument('inputfile', help='Input PCAP filename.', type=str)
+    parser.add_argument(
+        '-o', '--output', help='Output CSV filename.', type=str, required=True)
+    parser.add_argument(
+        '-t', '--target-start-time', help='Date and time of initial event.',
+        type=str)
+    parser.add_argument(
+        '-r', '--replace-ip', nargs='+', help=(
+            'Specify IP address replacement. Can specify either individual '
+            + 'addresses, such as 10.0.1.10:192.168.1.10, or ranges of IP '
+            + 'addresses with subnet bits, such as 10.0.1.0:192.168.1.0/24. '
+            + 'Multiple pairs can be replaced using multiple -r args.'
+        ), action='append', type=str)
+    parser.add_argument(
+        '-l', '--limit-ip', nargs='+',
+        help='Specify IP address or range to ignore.', action='append',
+        type=str)
+
+    args = vars(parser.parse_args())
+    replacements = []
+    for r in args["replace_ip"]:
+        old = (
+            r[0].split("/")[0].split(":")[0]
+            if "/" in r[0] else r[0].split(":")[0])
+        new = (
+            r[0].split("/")[0].split(":")[1]
+            if "/" in r[0] else r[0].split(":")[1])
+        bits = int(r[0].split("/")[1]) if "/" in r[0] else 32
+        replacements.append((old, new, bits))
+
+    inputfile, outputfile = args["inputfile"], args["output"]
+    print(f"Parsing PCAP: '{inputfile}'")
+    records = parse_pcap(inputfile)
 
     if any(records):
         min_timestamp = records[0]["Timestamp"]
