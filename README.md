@@ -14,6 +14,8 @@ optional arguments:
   -t TARGET_START_TIME, --target-start-time TARGET_START_TIME
                         Date and time of initial event.
   -n, --no-response     Ignore response.
+  -s, --syn-only        Filter out all TCP packets that do not establish a connection. This will ignore all TCP packets that have
+                        combinations of flags different than SYN.
   -r REPLACE_IP [REPLACE_IP ...], --replace-ip REPLACE_IP [REPLACE_IP ...]
                         Specify IP address replacement. Can specify either individual addresses, such as 10.0.1.10:192.168.1.10, or
                         ranges of IP addresses with subnet bits, such as 10.0.1.0:192.168.1.0/24. Multiple pairs can be replaced

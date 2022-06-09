@@ -48,7 +48,8 @@ class PacketProcessor:
             ignored_ip_ranges: List[Tuple[str, str]],
             ignored_ip_subnets: List[str],
             time_shift: timedelta,
-            filter_response: bool) -> List[dict]:
+            filter_response: bool,
+            syn_only: bool) -> List[dict]:
         new_records = []
         awaiting_response = set()
         for record in source:
@@ -83,8 +84,13 @@ class PacketProcessor:
                     else:
                         awaiting_response.add(packet)
                         new_records.append(new_record)
-                else:
-                    new_records.append(new_record)
+                    # Ignore response packets
+                    continue
+                if syn_only:
+                    if record["Protokol"] == "tcp" and not record["is_syn"]:
+                        # Ignore TCP packets that do not establish connections
+                        continue
+                new_records.append(new_record)
         return new_records
 
     @staticmethod
@@ -140,7 +146,14 @@ def parse_pcap(inputfile: str) -> List[dict]:
                         frame.payload.payload.payload, "dstport"
                     ) else ""
                 ),
-                "Protokol": str(frame.payload.payload.payload.protocol).lower()
+                "Protokol": str(frame.payload.payload.payload.protocol).lower(),
+                "is_syn": (
+                    all([
+                        not frame.payload.payload.payload.info.flags[flag]
+                        for flag in frame.payload.payload.payload.info.flags
+                        if flag != "syn"])
+                    and frame.payload.payload.payload.info.flags["syn"]
+                ) if is_TCP else None
             }
             if record["Source Port"] and record["Destination Port"]:
                 records.append(record)
@@ -169,6 +182,12 @@ if __name__ == '__main__':
         '-n', '--no-response', help='Ignore response.',
         const=True, default=False, action='store_const')
     parser.add_argument(
+        '-s', '--syn-only', help=(
+            'Filter out all TCP packets that do not establish a connection. '
+            + 'This will ignore all TCP packets that have combinations of '
+            + 'flags different than SYN.'
+        ),const=True, default=False, action='store_const')
+    parser.add_argument(
         '-r', '--replace-ip', nargs='+', help=(
             'Specify IP address replacement. Can specify either individual '
             + 'addresses, such as 10.0.1.10:192.168.1.10, or ranges of IP '
@@ -181,7 +200,6 @@ if __name__ == '__main__':
             + 'individual addresses, ranges such as 10.0.1.15-10.0.1.255, '
             + 'or subnets, such as 10.0.1.0/24.'
         ), action='append', type=str)
-
     args = vars(parser.parse_args())
 
     replacements = []
@@ -216,7 +234,8 @@ if __name__ == '__main__':
     packet_processor = PacketProcessor()
     output_records = packet_processor.process_packet_records(
         records, replacements, ignored_ip_addresses, ignored_ip_ranges,
-        ignored_ip_subnets, new_time - min_timestamp, args["no_response"])
+        ignored_ip_subnets, new_time - min_timestamp, args["no_response"],
+        args["syn_only"])
 
     print("Storing results...")
     with open(outputfile, 'w') as f:
