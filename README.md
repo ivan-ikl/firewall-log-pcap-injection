@@ -8,21 +8,13 @@ positional arguments:
   inputfile             Input PCAP filename.
 
 optional arguments:
-  -h, --help            show this help message and exit
-  -o OUTPUT, --output OUTPUT
-                        Output CSV filename.
-  -t TARGET_START_TIME, --target-start-time TARGET_START_TIME
-                        Date and time of initial event.
-  -n, --no-response     Ignore response.
-  -s, --syn-only        Filter out all TCP packets that do not establish a connection. This will ignore all TCP packets that have
-                        combinations of flags different than SYN.
-  -r REPLACE_IP [REPLACE_IP ...], --replace-ip REPLACE_IP [REPLACE_IP ...]
-                        Specify IP address replacement. Can specify either individual addresses, such as 10.0.1.10:192.168.1.10, or
-                        ranges of IP addresses with subnet bits, such as 10.0.1.0:192.168.1.0/24. Multiple pairs can be replaced
-                        using multiple -r args.
-  -i IGNORE_IP [IGNORE_IP ...], --ignore-ip IGNORE_IP [IGNORE_IP ...]
-                        Specify IP address or range to ignore. Can specify either individual addresses, ranges such as
-                        10.0.1.15-10.0.1.255, or subnets, such as 10.0.1.0/24.
+  * -h, --help // show this help message and exit
+  * -o OUTPUT, --output OUTPUT // Output CSV filename.
+  * -t TARGET_START_TIME, --target-start-time TARGET_START_TIME // Date and time of initial event.
+  * -n, --no-response // Ignore response.
+  * -s, --syn-only // Filter out all TCP packets that do not establish a connection. This will ignore all TCP packets that have combinations of flags different than SYN.
+  * -r REPLACE_IP [REPLACE_IP ...], --replace-ip REPLACE_IP [REPLACE_IP ...] // Specify IP address replacement. Can specify either individual addresses, such as 10.0.1.10:192.168.1.10, or ranges of IP addresses with subnet bits, such as 10.0.1.0:192.168.1.0/24. Multiple pairs can be replaced using multiple -r args.
+  * -i IGNORE_IP [IGNORE_IP ...], --ignore-ip IGNORE_IP [IGNORE_IP ...] // Specify IP address or range to ignore. Can specify either individual addresses, ranges such as 10.0.1.15-10.0.1.255, or subnets, such as 10.0.1.0/24.
 
 ## Examples
 
